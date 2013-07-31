@@ -57,6 +57,7 @@ public class PortletListenerNotifier extends SynchronizedRequestHandler {
     @Override
     public boolean synchronizedHandleRequest(VaadinSession session,
             VaadinRequest request, VaadinResponse response) throws IOException {
+        session.ensureAccessActive();
 
         VaadinPortletSession sess = (VaadinPortletSession) session;
         PortletRequest portletRequest = ((VaadinPortletRequest) request)

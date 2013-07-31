@@ -28,6 +28,7 @@ import com.vaadin.server.VaadinRequest;
 import com.vaadin.server.VaadinResponse;
 import com.vaadin.server.VaadinService;
 import com.vaadin.server.VaadinServletService;
+import com.vaadin.server.VaadinSession;
 import com.vaadin.shared.ApplicationConstants;
 
 /**
@@ -68,18 +69,20 @@ public class LoginForm extends CustomComponent {
         }
         final StringBuilder responseBuilder = new StringBuilder();
 
-        getUI().accessSynchronously(new Runnable() {
-            @Override
-            public void run() {
-                String method = VaadinServletService.getCurrentServletRequest()
-                        .getMethod();
-                if (method.equalsIgnoreCase("post")) {
-                    responseBuilder.append(handleLogin(request));
-                } else {
-                    responseBuilder.append(getLoginHTML());
-                }
+        UI ui = getUI();
+        VaadinSession session = ui.getSession();
+        session.lockAndAccess(ui);
+        try {
+            String method = VaadinServletService.getCurrentServletRequest()
+                    .getMethod();
+            if (method.equalsIgnoreCase("post")) {
+                responseBuilder.append(handleLogin(request));
+            } else {
+                responseBuilder.append(getLoginHTML());
             }
-        });
+        } finally {
+            session.unlock();
+        }
 
         if (responseBuilder.length() > 0) {
             response.setContentType("text/html; charset=utf-8");

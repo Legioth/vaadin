@@ -77,8 +77,9 @@ public class PublishedFileHandler implements RequestHandler {
             return true;
         }
 
-        // Check that the resource name has been registered
-        session.lock();
+        // Check that the resource name has been registered, no need to fire
+        // access events.
+        session.lock(false);
         Class<?> context;
         try {
             context = session.getCommunicationManager().getDependencies()

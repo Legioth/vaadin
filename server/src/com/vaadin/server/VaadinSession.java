@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +50,7 @@ import com.vaadin.shared.communication.PushMode;
 import com.vaadin.ui.AbstractField;
 import com.vaadin.ui.Table;
 import com.vaadin.ui.UI;
+import com.vaadin.ui.UIDetachedException;
 import com.vaadin.util.CurrentInstance;
 import com.vaadin.util.ReflectTools;
 
@@ -143,6 +145,11 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
             .findMethod(BootstrapListener.class, "modifyBootstrapPage",
                     BootstrapPageResponse.class);
 
+    private static final Method ACCESS_START_METHOD = ReflectTools.findMethod(
+            AccessListener.class, "accessStart", AccessStartEvent.class);
+    private static final Method ACCESS_END_METHOD = ReflectTools.findMethod(
+            AccessListener.class, "accessEnd", AccessEndEvent.class);
+
     /**
      * Configuration for the session.
      */
@@ -204,6 +211,19 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
      * thread has the lock.
      */
     private transient ConcurrentLinkedQueue<FutureAccess> pendingAccessQueue;
+
+    /**
+     * Keeps track of the connectors for which UIDL has been written during the
+     * current access. This field is <code>null</code> iff no access is
+     * currently going on.
+     */
+    private transient Collection<Integer> currentAccessChangeUis;
+
+    /*
+     * Declared as LinkedList instead of e.g. Deque since it is not guaranteed
+     * that all Deque implementations support null values.
+     */
+    private transient LinkedList<Map<Class<?>, CurrentInstance>> previousInstances;
 
     /**
      * Create a new service session tied to a Vaadin service
@@ -828,22 +848,53 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
 
     /**
      * Gets the {@link Lock} instance that is used for protecting the data of
-     * this session from concurrent access.
+     * this session from concurrent access. The preferred way to ensure locking
+     * is done correctly is to wrap your code using {@link UI#access(Runnable)}
+     * (or {@link VaadinSession#access(Runnable)} if you are only touching the
+     * session and not any UI).
      * <p>
      * The <code>Lock</code> can be used to gain more control than what is
-     * available only using {@link #lock()} and {@link #unlock()}. The returned
-     * instance is not guaranteed to support any other features of the
-     * <code>Lock</code> interface than {@link Lock#lock()} and
+     * available only using {@link #lock()}. After the lock has been acquired,
+     * it is generally recommended to invoke {@link #startAccess()} to let
+     * {@link AccessListener}s prepare the session for access.
+     * <p>
+     * While {@link Lock#unlock()} can be used for releasing the lock,
+     * {@link #unlock()} must be used to notify {@link AccessListener}s that the
+     * access is ending if {@link #startAccess()} has been called.
+     * {@link VaadinService#ensureAccessQueuePurged(VaadinSession)} should also
+     * be invoked after directly releasing the lock since there might otherwise
+     * be a race condition that causes pending access tasks to not be purged as
+     * expected.
+     * <p>
+     * The returned instance is not guaranteed to support any other features of
+     * the <code>Lock</code> interface than {@link Lock#lock()} and
      * {@link Lock#unlock()}.
      * 
      * @return the <code>Lock</code> that is used for synchronization, never
      *         <code>null</code>
      * 
+     * @see UI#access(Runnable)
+     * @see #access(Runnable)
      * @see #lock()
      * @see Lock
      */
     public Lock getLockInstance() {
         return lock;
+    }
+
+    /**
+     * In prior versions of Vaadin 7, this method was used as a shorthand for
+     * <code>getLockInstance().lock()</code>. With 7.1 introducing
+     * {@link UI#access(Runnable)} as the recommended way of thread-safe access,
+     * a shorthand is no longer needed. With {@link AccessListener} introduced
+     * in 7.2, this method might no longer have the desired effect.
+     * 
+     * 
+     * @deprecated As of 7.2, use {@link #lock(boolean)} instead.
+     */
+    @Deprecated
+    public void lock() {
+        lock(false);
     }
 
     /**
@@ -865,11 +916,14 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
      * });
      * </pre>
      * 
-     * If you for whatever reason want to do locking manually, you should do it
-     * like:
+     * If you for whatever reason want to do locking manually, you should in
+     * most cases also set the current session and notify access listeners that
+     * the session is being accessed. These additional steps are required in any
+     * case that might invoke generic component code since that code might
+     * depend on the result of those steps. The pattern for doing this is:
      * 
      * <pre>
-     * session.lock();
+     * session.lock(true);
      * try {
      *     doSomething();
      * } finally {
@@ -882,12 +936,131 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
      * {@link #getLockInstance()} can be used if more control over the locking
      * is required.
      * 
+     * @param startAccess
+     *            <code>true</code> to fire access events if not already fired,
+     *            <code>false</code> to just lock the session without firing any
+     *            events.
+     * 
+     * @see UI#access(Runnable)
+     * @see #access(Runnable)
+     * @see #lockAndAccess(UI)
      * @see #unlock()
+     * @see #ensureAccessActive()
      * @see #getLockInstance()
      * @see #hasLock()
+     * 
+     * @since 7.2
      */
-    public void lock() {
+    public void lock(boolean startAccess) {
+        lock(startAccess, null);
+    }
+
+    /**
+     * Locks this session to protect its data from concurrent access and set the
+     * current UI. Accessing the UI state from outside the normal request
+     * handling should always lock the session and unlock it when done. The
+     * preferred way to ensure locking is done correctly is to wrap your code
+     * using {@link UI#access(Runnable)}, e.g.:
+     * 
+     * <pre>
+     * myUI.access(new Runnable() {
+     *     &#064;Override
+     *     public void run() {
+     *         // Here it is safe to update the UI.
+     *         // UI.getCurrent can also be used
+     *         myUI.getContent().setCaption(&quot;Changed safely&quot;);
+     *     }
+     * });
+     * </pre>
+     * 
+     * If you for whatever reason want to do locking manually, you can use this
+     * method to automatically fire access events and set the current UI:
+     * 
+     * <pre>
+     * session.lock(myUi);
+     * try {
+     *     doSomething();
+     * } finally {
+     *     session.unlock();
+     * }
+     * </pre>
+     * 
+     * This method will block until the lock can be retrieved.
+     * <p>
+     * If you are locking to access a specific UI instance, you might want to
+     * use {@link #lockAndAccess(UI)} instead. {@link #getLockInstance()} can be
+     * used if more control over the locking is required.
+     * 
+     * @param currentUi
+     *            The UI to set as the current instance.
+     * 
+     * @see UI#access(Runnable)
+     * @see #access(Runnable)
+     * @see #unlock()
+     * @see #lock(boolean)
+     * @see #ensureAccessActive()
+     * @see #getLockInstance()
+     * @see #hasLock()
+     * 
+     * @since 7.2
+     */
+    public void lockAndAccess(UI currentUi) {
+        lock(true, currentUi);
+    }
+
+    private void lock(boolean startAccess, UI currentUi) {
+        VaadinService.verifyNoOtherSessionLocked(this);
+
         getLockInstance().lock();
+        Map<Class<?>, CurrentInstance> previousCurrent = null;
+        try {
+            if (currentUi != null && currentUi.getSession() == null) {
+                throw new UIDetachedException();
+            }
+
+            LinkedList<Map<Class<?>, CurrentInstance>> previousInstances = getPreviousInstances();
+
+            assert previousInstances.size() == ((ReentrantLock) getLockInstance())
+                    .getHoldCount() - 1;
+
+            if (startAccess) {
+                if (currentUi != null) {
+                    previousCurrent = CurrentInstance.setCurrent(currentUi);
+                } else {
+                    previousCurrent = CurrentInstance.setCurrent(this);
+                }
+
+                ensureAccessActive();
+            }
+
+            // Add to stack as the last operation in case startAccess() throws
+            previousInstances.addLast(previousCurrent);
+
+        } catch (RuntimeException e) {
+            /*
+             * This method is not run inside the normal try-finally that ensures
+             * that the session is always unlocked, so it's our responsibility
+             * to unlock before rethrowing.
+             */
+            getLockInstance().unlock();
+
+            if (previousCurrent != null) {
+                CurrentInstance.restoreInstances(previousCurrent);
+            }
+
+            throw e;
+        }
+    }
+
+    private LinkedList<Map<Class<?>, CurrentInstance>> getPreviousInstances() {
+        assert hasLock();
+
+        // Lazy init because transient field is null after deserialization
+        if (previousInstances == null) {
+            previousInstances = new LinkedList<Map<Class<?>, CurrentInstance>>();
+        }
+
+        return previousInstances;
     }
 
     /**
@@ -897,18 +1070,28 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
      * For UIs in this session that have its push mode set to
      * {@link PushMode#AUTOMATIC automatic}, pending changes will be pushed to
      * their respective clients.
+     * <p>
+     * This method will fire an {@link AccessEndEvent} if there is an active
+     * session access that ends when the lock is released.
      * 
      * @see #lock()
+     * @see #addAccessListener(AccessListener)
      * @see UI#push()
      */
     public void unlock() {
         assert hasLock();
+        boolean ultimateUnlock = false;
         try {
+            assert getPreviousInstances().size() == ((ReentrantLock) getLockInstance())
+                    .getHoldCount();
+
             /*
-             * Run pending tasks and push if the reentrant lock will actually be
-             * released by this unlock() invocation.
+             * Run pending tasks, push and fire access end events there is an
+             * active access and the reentrant lock will actually be released by
+             * this unlock() invocation.
              */
-            if (((ReentrantLock) getLockInstance()).getHoldCount() == 1) {
+            if (isAccessActive() && getPreviousInstances().size() == 1) {
+                ultimateUnlock = true;
                 getService().runPendingAccessTasks(this);
 
                 for (UI ui : getUIs()) {
@@ -922,9 +1105,32 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
                         }
                     }
                 }
+
+                AccessEndEvent event = new AccessEndEvent(this,
+                        currentAccessChangeUis);
+                currentAccessChangeUis = null;
+
+                eventRouter.fireEvent(event, true);
             }
         } finally {
-            getLockInstance().unlock();
+            try {
+                // Must modify previous instance stack before unlocking
+                Map<Class<?>, CurrentInstance> previous = getPreviousInstances()
+                        .removeLast();
+                if (previous != null) {
+                    CurrentInstance.restoreInstances(previous);
+                }
+            } finally {
+                getLockInstance().unlock();
+            }
+        }
+
+        /*
+         * Start a new access if tasks were enqueued while pushing or firing end
+         * events.
+         */
+        if (ultimateUnlock && !getPendingAccessQueue().isEmpty()) {
+            getService().ensureAccessQueuePurged(this);
         }
     }
 
@@ -1187,24 +1393,21 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
      * 
      * @since 7.1
      * 
-     * @see #lock()
+     * @see #lock(boolean)
      * @see #getCurrent()
      * @see #access(Runnable)
      * @see UI#accessSynchronously(Runnable)
+     * 
+     * @deprecated As of 7.2, use {@link #lock(boolean)} and {@link #unlock()}
+     *             instead.
      */
+    @Deprecated
     public void accessSynchronously(Runnable runnable) {
-        VaadinService.verifyNoOtherSessionLocked(this);
-
-        Map<Class<?>, CurrentInstance> old = null;
-        lock();
+        lock(true);
         try {
-            old = CurrentInstance.setCurrent(this);
             runnable.run();
         } finally {
             unlock();
-            if (old != null) {
-                CurrentInstance.restoreInstances(old);
-            }
         }
 
     }
@@ -1283,6 +1486,116 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
     public String getCsrfToken() {
         assert hasLock();
         return csrfToken;
+    }
+
+    /**
+     * Adds a listener that is notified when access to this session is starting
+     * and ending.
+     * 
+     * @see #removeAccessListener(AccessListener)
+     * @see AccessListener#accessStart(AccessStartEvent)
+     * @see AccessListener#accessEnd(AccessEndEvent)
+     * 
+     * @since 7.2
+     * @param accessListener
+     *            the access listener to add
+     */
+    public void addAccessListener(AccessListener accessListener) {
+        eventRouter.addListener(AccessStartEvent.class, accessListener,
+                ACCESS_START_METHOD);
+        eventRouter.addListener(AccessEndEvent.class, accessListener,
+                ACCESS_END_METHOD);
+    }
+
+    /**
+     * Removes an access listener that was added using
+     * {@link #addAccessListener(AccessListener)}.
+     * 
+     * 
+     * @see #addAccessListener(AccessListener)
+     * 
+     * @since 7.2
+     * @param accessListener
+     *            the access listener to remove
+     */
+    public void removeAccessListener(AccessListener accessListener) {
+        eventRouter.removeListener(AccessStartEvent.class, accessListener,
+                ACCESS_START_METHOD);
+        eventRouter.removeListener(AccessEndEvent.class, accessListener,
+                ACCESS_END_METHOD);
+    }
+
+    /**
+     * Starts a new access by firing an {@link AccessStartEvent} and running any
+     * pending access tasks. This method should be invoked while holding the
+     * session lock and only if an access has not already been started (as
+     * indicated by {@link #isAccessActive()}).
+     * 
+     * @since 7.2
+     */
+    private void startAccess() {
+        assert hasLock();
+        if (isAccessActive()) {
+            throw new IllegalStateException(
+                    "There is already an active access to this session.");
+        }
+
+        currentAccessChangeUis = new HashSet<Integer>();
+
+        eventRouter.fireEvent(new AccessStartEvent(this), false);
+
+        // Run access tasks scheduled by access listeners
+        getService().runPendingAccessTasks(this);
+    }
+
+    /**
+     * Checks whether this session is currently being accessed, meaning that an
+     * access start event has been fired when the session was locked and that a
+     * access end event will be fired when it is unlocked. See
+     * {@link AccessListener} for a definition of what constitutes an access.
+     * 
+     * @since 7.2
+     * @return <code>true</code> if this session is being accessed, otherwise
+     *         <code>false</code>
+     */
+    public boolean isAccessActive() {
+        assert hasLock();
+        return currentAccessChangeUis != null;
+    }
+
+    /**
+     * Initiates access to this session if it isn't already active. This should
+     * be done directly after locking the session but before starting to access
+     * any data in the session.
+     * <p>
+     * This method fires an access start event to listeners registered using
+     * {@link #addAccessListener(AccessListener)} and runs any pending access
+     * tasks.
+     * <p>
+     * This method is automatically invoked from {@link #lock(boolean)} called
+     * with a <code>true</code> parameter and from {@link #lockAndAccess(UI)}.
+     * 
+     * @since 7.2
+     */
+    public void ensureAccessActive() {
+        if (!isAccessActive()) {
+            startAccess();
+        }
+    }
+
+    /**
+     * Marks that changes has been sent to the client for the provided UI. This
+     * information may be used by listeners to the {@link AccessEndEvent}. This
+     * method is only intended to be used internally by the framework;
+     * application developers should typically not call this method.
+     * 
+     * @since 7.2
+     * @param ui
+     *            the UI for which changes have been sent
+     */
+    public void markChangesSent(UI ui) {
+        assert isAccessActive();
+        currentAccessChangeUis.add(Integer.valueOf(ui.getUIId()));
     }
 
 }

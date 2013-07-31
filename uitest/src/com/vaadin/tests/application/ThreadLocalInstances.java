@@ -34,7 +34,7 @@ public class ThreadLocalInstances extends AbstractTestCase {
                 Thread thread = new Thread() {
                     @Override
                     public void run() {
-                        getSession().lock();
+                        getSession().lockAndAccess(mainWindow);
                         try {
                             reportCurrentStatus("background thread");
                         } finally {
@@ -52,7 +52,7 @@ public class ThreadLocalInstances extends AbstractTestCase {
     private final FlagSeResource resource = new FlagSeResource() {
         @Override
         public DownloadStream getStream() {
-            ThreadLocalInstances.this.getContext().lock();
+            ThreadLocalInstances.this.getContext().lockAndAccess(mainWindow);
             try {
                 reportCurrentStatus("resource handler");
             } finally {

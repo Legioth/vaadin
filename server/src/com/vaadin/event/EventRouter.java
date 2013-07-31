@@ -148,21 +148,49 @@ public class EventRouter implements MethodEventSource {
 
     /**
      * Sends an event to all registered listeners. The listeners will decide if
-     * the activation method should be called or not.
+     * the activation method should be called or not. The listeners are notified
+     * in the order they have been added.
      * 
      * @param event
      *            the Event to be sent to all listeners.
      */
     public void fireEvent(EventObject event) {
+        fireEvent(event, false);
+    }
+
+    /**
+     * Sends an event to all registered listeners in the desired order. The
+     * listeners will decide if the activation method should be called or not.
+     * 
+     * @since 7.2
+     * 
+     * @param event
+     *            the Event to be sent to all listeners.
+     * @param reverseOrder
+     *            <code>true</code> to notify listeners in reverse order of
+     *            registration; <code>false</code> to notify listeners in the
+     *            order they were added
+     */
+    public void fireEvent(EventObject event, boolean reverseOrder) {
         // It is not necessary to send any events if there are no listeners
         if (listenerList != null) {
 
             // Make a copy of the listener list to allow listeners to be added
             // inside listener methods. Fixes #3605.
+            final Object[] listeners;
+            if (reverseOrder) {
+                int size = listenerList.size();
+                listeners = new Object[size];
+                Iterator<ListenerMethod> iterator = listenerList.iterator();
+                for (int i = size - 1; i >= 0; i--) {
+                    listeners[i] = iterator.next();
+                }
+            } else {
+                listeners = listenerList.toArray();
+            }
 
             // Send the event to all listeners. The listeners themselves
             // will filter out unwanted events.
-            final Object[] listeners = listenerList.toArray();
             for (int i = 0; i < listeners.length; i++) {
                 ((ListenerMethod) listeners[i]).receiveEvent(event);
             }

@@ -269,10 +269,10 @@ public class PushHandler extends AtmosphereResourceEventListenerAdapter
                 return;
             }
 
-            session.lock();
+            // Access started manually after verifying UI existence.
+            session.lock(false);
             try {
-                VaadinSession.setCurrent(session);
-                // Sets UI.currentInstance
+                // Sets current instances
                 final UI ui = service.findUI(vaadinRequest);
                 if (ui == null) {
                     // This a request through an already open push connection to
@@ -286,6 +286,7 @@ public class PushHandler extends AtmosphereResourceEventListenerAdapter
                     return;
                 }
 
+                session.ensureAccessActive();
                 callback.run(resource, ui);
             } catch (IOException e) {
                 getLogger().log(Level.INFO,

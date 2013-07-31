@@ -75,8 +75,9 @@ public class ComboPushTiming extends TestBase {
 
     private void changeValue(final ComboBox cb) {
         executor.execute(new Runnable() {
+            @Override
             public void run() {
-                VaadinSession.getCurrent().lock();
+                VaadinSession.getCurrent().lockAndAccess(getMainWindow());
                 try {
                     cb.setEnabled(true);
                     cb.setValue("B");

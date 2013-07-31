@@ -13,28 +13,27 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.vaadin.tests.components;
 
-import com.vaadin.server.VaadinRequest;
-import com.vaadin.tests.util.Log;
-import com.vaadin.ui.VerticalLayout;
+package com.vaadin.server;
 
-public abstract class AbstractTestUIWithLog extends AbstractTestUI {
+/**
+ * Event fired when session access is starting.
+ * 
+ * @see AccessListener
+ * 
+ * @since 7.2
+ * @author Vaadin Ltd
+ */
+public class AccessStartEvent extends AbstractAccessEvent {
 
-    protected Log log = new Log(getLogMessageCount());
-
-    @Override
-    public void init(VaadinRequest request) {
-        super.init(request);
-        ((VerticalLayout) getContent()).addComponent(log, 0);
-    }
-
-    protected void log(String message) {
-        log.log(message);
-    }
-
-    protected int getLogMessageCount() {
-        return 5;
+    /**
+     * Creates a new access start event.
+     * 
+     * @param session
+     *            the accessed vaadin session
+     */
+    public AccessStartEvent(VaadinSession session) {
+        super(session);
     }
 
 }

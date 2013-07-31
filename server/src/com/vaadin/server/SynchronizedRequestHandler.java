@@ -36,7 +36,8 @@ public abstract class SynchronizedRequestHandler implements RequestHandler {
             return false;
         }
 
-        session.lock();
+        // Handler responsible for starting access if actually touching UI logic
+        session.lock(false);
         try {
             return synchronizedHandleRequest(session, request, response);
         } finally {
@@ -48,7 +49,9 @@ public abstract class SynchronizedRequestHandler implements RequestHandler {
      * Identical to
      * {@link #handleRequest(VaadinSession, VaadinRequest, VaadinResponse)}
      * except the {@link VaadinSession} is locked before this is called and
-     * unlocked after this has completed.
+     * unlocked after this has completed. Access start events are however not
+     * fired, so implementations should run
+     * {@link VaadinSession#ensureAccessActive()} before touching UI state.
      * 
      * @see #handleRequest(VaadinSession, VaadinRequest, VaadinResponse)
      * @param session

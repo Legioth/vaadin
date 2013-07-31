@@ -68,6 +68,15 @@ public abstract class UIInitHandler extends SynchronizedRequestHandler {
         try {
             assert UI.getCurrent() == null;
 
+            /*
+             * Start access even though the new UI will not be available to
+             * listeners since we will call UI provider code and maybe even
+             * close a previous UI before the new instance would be available.
+             * Could separate this to two separate accesses if it turns out that
+             * access listeners need to know the UI for init access events.
+             */
+            session.ensureAccessActive();
+
             // Set browser information from the request
             session.getBrowser().updateRequestDetails(request);
 

@@ -50,9 +50,11 @@ public class SessionRequestHandler implements RequestHandler {
     @Override
     public boolean handleRequest(VaadinSession session, VaadinRequest request,
             VaadinResponse response) throws IOException {
-        // Use a copy to avoid ConcurrentModificationException
-        session.lock();
+
+        // Use a copy to avoid ConcurrentModificationException. No point in
+        // firing access events just for fetching the list.
         ArrayList<RequestHandler> requestHandlers;
+        session.lock(false);
         try {
             requestHandlers = new ArrayList<RequestHandler>(
                     session.getRequestHandlers());

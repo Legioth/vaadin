@@ -47,7 +47,7 @@ public class MassInsertMemoryLeakTestApp extends LegacyApplication {
 
         @Override
         public void start() {
-            getContext().lock();
+            getContext().lockAndAccess(getMainWindow());
             try {
                 proggress.setVisible(true);
                 proggress.setValue(new Float(0));
@@ -78,7 +78,7 @@ public class MassInsertMemoryLeakTestApp extends LegacyApplication {
                                     getRandonName());
                         }
                         c.commit();
-                        getContext().lock();
+                        getContext().lockAndAccess(getMainWindow());
                         try {
                             proggress
                                     .setValue(new Float((1.0f * cent) / cents));
@@ -95,7 +95,7 @@ public class MassInsertMemoryLeakTestApp extends LegacyApplication {
                     e.printStackTrace();
                 }
             }
-            getContext().lock();
+            getContext().lockAndAccess(getMainWindow());
             try {
                 proggress.setVisible(false);
                 proggress.setPollingInterval(0);

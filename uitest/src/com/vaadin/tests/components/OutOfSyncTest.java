@@ -30,7 +30,7 @@ public class OutOfSyncTest extends AbstractTestUI {
                 }
                 // Remove button but prevent repaint -> causes out of sync
                 // issues
-                getSession().lock();
+                getSession().lockAndAccess(OutOfSyncTest.this);
                 try {
                     setContent(null);
                     getConnectorTracker().markClean(OutOfSyncTest.this);

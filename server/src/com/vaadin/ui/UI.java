@@ -1203,35 +1203,25 @@ public abstract class UI extends AbstractSingleComponentContainer implements
      * 
      * @see #access(Runnable)
      * @see VaadinSession#accessSynchronously(Runnable)
+     * 
+     * @deprecated As of 7.2, use {@link VaadinSession#lockAndAccess(UI)} and
+     *             {@link VaadinSession#unlock()} instead.
      */
+    @Deprecated
     public void accessSynchronously(Runnable runnable)
             throws UIDetachedException {
-        Map<Class<?>, CurrentInstance> old = null;
-
         VaadinSession session = getSession();
 
         if (session == null) {
             throw new UIDetachedException();
         }
 
-        VaadinService.verifyNoOtherSessionLocked(session);
-
-        session.lock();
+        session.lockAndAccess(this);
         try {
-            if (getSession() == null) {
-                // UI was detached after fetching the session but before we
-                // acquired the lock.
-                throw new UIDetachedException();
-            }
-            old = CurrentInstance.setCurrent(this);
             runnable.run();
         } finally {
             session.unlock();
-            if (old != null) {
-                CurrentInstance.restoreInstances(old);
-            }
         }
-
     }
 
     /**
@@ -1290,7 +1280,9 @@ public abstract class UI extends AbstractSingleComponentContainer implements
         return session.access(new Runnable() {
             @Override
             public void run() {
-                accessSynchronously(runnable);
+                // Will be cleared after running each access task
+                UI.setCurrent(UI.this);
+                runnable.run();
             }
         });
     }
@@ -1326,11 +1318,12 @@ public abstract class UI extends AbstractSingleComponentContainer implements
      * Pushes the pending changes and client RPC invocations of this UI to the
      * client-side.
      * <p>
-     * As with all UI methods, the session must be locked when calling this
-     * method. It is also recommended that {@link UI#getCurrent()} is set up to
-     * return this UI since writing the response may invoke logic in any
-     * attached component or extension. The recommended way of fulfilling these
-     * conditions is to use {@link #access(Runnable)}.
+     * As with all UI methods, the session must be locked and access initiated
+     * when calling this method. It is also recommended that
+     * {@link UI#getCurrent()} is set up to return this UI since writing the
+     * response may invoke logic in any attached component or extension. The
+     * recommended way of fulfilling these conditions is to use
+     * {@link #access(Runnable)}.
      * 
      * @throws IllegalStateException
      *             if push is disabled.
@@ -1344,7 +1337,8 @@ public abstract class UI extends AbstractSingleComponentContainer implements
     public void push() {
         VaadinSession session = getSession();
         if (session != null) {
-            assert session.hasLock();
+            // This also asserts that the session is locked
+            assert session.isAccessActive();
 
             /*
              * Purge the pending access queue as it might mark a connector as

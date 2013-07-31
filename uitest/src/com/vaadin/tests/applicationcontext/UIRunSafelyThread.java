@@ -1,6 +1,8 @@
 package com.vaadin.tests.applicationcontext;
 
+import com.vaadin.server.VaadinSession;
 import com.vaadin.ui.UI;
+import com.vaadin.ui.UIDetachedException;
 
 public abstract class UIRunSafelyThread extends Thread {
     private UI ui;

@@ -86,7 +86,9 @@ public class GlobalResourceHandler implements RequestHandler {
             return error(request, response, pathInfo
                     + " is not a valid global resource path");
         }
-        session.lock();
+
+        // Access is started manually if preconditions are OK
+        session.lock(false);
         Map<Class<?>, CurrentInstance> oldInstances = null;
         DownloadStream stream = null;
         try {
@@ -107,6 +109,8 @@ public class GlobalResourceHandler implements RequestHandler {
                 return error(request, response, "Global resource " + key
                         + " not found");
             }
+
+            session.ensureAccessActive();
 
             stream = resource.getStream();
             if (stream == null) {

@@ -255,10 +255,10 @@ public class FileUploadHandler implements RequestHandler {
         ClientConnector source;
         StreamVariable streamVariable;
 
-        session.lock();
+        // Just fetch stuff from the connector tracker, access not needed
+        session.lock(false);
         try {
             UI uI = session.getUIById(Integer.parseInt(uiId));
-            UI.setCurrent(uI);
 
             streamVariable = uI.getConnectorTracker().getStreamVariable(
                     connectorId, variableName);
@@ -421,12 +421,13 @@ public class FileUploadHandler implements RequestHandler {
             String filename, String mimeType, long contentLength,
             ClientConnector connector, String variableName)
             throws UploadException {
-        session.lock();
+        session.lockAndAccess(connector.getUI());
         try {
             if (connector == null) {
                 throw new UploadException(
                         "File upload ignored because the connector for the stream variable was not found");
             }
+
             if (!connector.isConnectorEnabled()) {
                 throw new UploadException("Warning: file upload ignored for "
                         + connector.getConnectorId()
@@ -439,6 +440,11 @@ public class FileUploadHandler implements RequestHandler {
                         "File upload ignored because the component is read-only");
             }
         } finally {
+            /*
+             * Releasing lock (and ending access) here just to acquire it again
+             * in the beginning of streamToReceiver. This could be optimized to
+             * just acquire the lock once.
+             */
             session.unlock();
         }
         try {
@@ -448,7 +454,7 @@ public class FileUploadHandler implements RequestHandler {
                 cleanStreamVariable(session, connector, variableName);
             }
         } catch (Exception e) {
-            session.lock();
+            session.lock(false);
             try {
                 session.getCommunicationManager()
                         .handleConnectorRelatedException(connector, e);
@@ -530,7 +536,7 @@ public class FileUploadHandler implements RequestHandler {
                 filename, type, contentLength);
         try {
             boolean listenProgress;
-            session.lock();
+            session.lock(true);
             try {
                 streamVariable.streamingStarted(startedEvent);
                 out = streamVariable.getOutputStream();
@@ -557,7 +563,9 @@ public class FileUploadHandler implements RequestHandler {
                 if (listenProgress) {
                     // update progress if listener set and contentLength
                     // received
-                    session.lock();
+                    // This could maybe use access() to avoid stalling if
+                    // session is locked?
+                    session.lock(true);
                     try {
                         StreamingProgressEventImpl progressEvent = new StreamingProgressEventImpl(
                                 filename, type, contentLength, totalBytes);
@@ -575,7 +583,7 @@ public class FileUploadHandler implements RequestHandler {
             out.close();
             StreamingEndEvent event = new StreamingEndEventImpl(filename, type,
                     totalBytes);
-            session.lock();
+            session.lock(true);
             try {
                 streamVariable.streamingFinished(event);
             } finally {
@@ -587,7 +595,7 @@ public class FileUploadHandler implements RequestHandler {
             tryToCloseStream(out);
             StreamingErrorEvent event = new StreamingErrorEventImpl(filename,
                     type, contentLength, totalBytes, e);
-            session.lock();
+            session.lock(true);
             try {
                 streamVariable.streamingFailed(event);
             } finally {
@@ -597,7 +605,7 @@ public class FileUploadHandler implements RequestHandler {
             // not a terminal level error like all other exception.
         } catch (final Exception e) {
             tryToCloseStream(out);
-            session.lock();
+            session.lock(true);
             try {
                 StreamingErrorEvent event = new StreamingErrorEventImpl(
                         filename, type, contentLength, totalBytes, e);
@@ -658,14 +666,12 @@ public class FileUploadHandler implements RequestHandler {
 
     private void cleanStreamVariable(VaadinSession session,
             final ClientConnector owner, final String variableName) {
-        session.accessSynchronously(new Runnable() {
-            @Override
-            public void run() {
-                owner.getUI()
-                        .getConnectorTracker()
-                        .cleanStreamVariable(owner.getConnectorId(),
-                                variableName);
-            }
-        });
+        session.lock(false);
+        try {
+            owner.getUI().getConnectorTracker()
+                    .cleanStreamVariable(owner.getConnectorId(), variableName);
+        } finally {
+            session.unlock();
+        }
     }
 }

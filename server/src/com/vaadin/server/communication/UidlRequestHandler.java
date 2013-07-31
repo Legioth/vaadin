@@ -76,6 +76,9 @@ public class UidlRequestHandler extends SynchronizedRequestHandler implements
             return true;
         }
 
+        // Start access once we know a UI is found
+        session.ensureAccessActive();
+
         checkWidgetsetVersion(request);
         // repaint requested or session has timed out and new one is created
         boolean repaintAll;

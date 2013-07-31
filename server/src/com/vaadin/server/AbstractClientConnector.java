@@ -625,7 +625,7 @@ public abstract class AbstractClientConnector implements ClientConnector,
         String[] parts = path.split("/", 2);
         String key = parts[0];
 
-        getSession().lock();
+        getSession().lockAndAccess(getUI());
         try {
             ConnectorResource resource = (ConnectorResource) getResource(key);
             if (resource == null) {

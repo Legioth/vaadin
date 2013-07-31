@@ -129,7 +129,7 @@ public class FileDownloader extends AbstractExtension {
             // Ignore if it isn't for us
             return false;
         }
-        getSession().lock();
+        getSession().lockAndAccess(getUI());
         DownloadStream stream;
 
         try {

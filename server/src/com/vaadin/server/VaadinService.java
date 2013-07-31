@@ -440,31 +440,31 @@ public abstract class VaadinService implements Serializable {
      */
     public void fireSessionDestroy(VaadinSession vaadinSession) {
         final VaadinSession session = vaadinSession;
-        session.accessSynchronously(new Runnable() {
-            @Override
-            public void run() {
-                ArrayList<UI> uis = new ArrayList<UI>(session.getUIs());
-                for (final UI ui : uis) {
-                    ui.accessSynchronously(new Runnable() {
-                        @Override
-                        public void run() {
-                            /*
-                             * close() called here for consistency so that it is
-                             * always called before a UI is removed.
-                             * UI.isClosing() is thus always true in UI.detach()
-                             * and associated detach listeners.
-                             */
-                            if (!ui.isClosing()) {
-                                ui.close();
-                            }
-                            session.removeUI(ui);
-                        }
-                    });
+        // Start access since we will be running detach listeners for all UIs
+        session.lock(true);
+        try {
+            ArrayList<UI> uis = new ArrayList<UI>(session.getUIs());
+            for (UI ui : uis) {
+                if (ui.getSession() != null) {
+                    /*
+                     * close() called here for consistency so that it is always
+                     * called before a UI is removed. UI.isClosing() is thus
+                     * always true in UI.detach() and associated detach
+                     * listeners.
+                     */
+                    UI.setCurrent(ui);
+                    if (!ui.isClosing()) {
+                        ui.close();
+                    }
+                    session.removeUI(ui);
                 }
-                eventRouter.fireEvent(new SessionDestroyEvent(
-                        VaadinService.this, session));
             }
-        });
+            UI.setCurrent(null);
+            eventRouter.fireEvent(new SessionDestroyEvent(VaadinService.this,
+                    session));
+        } finally {
+            session.unlock();
+        }
     }
 
     /**
@@ -943,7 +943,7 @@ public abstract class VaadinService implements Serializable {
             ui = session.getUIById(uiId);
         }
 
-        UI.setCurrent(ui);
+        CurrentInstance.setCurrent(ui);
         return ui;
     }
 
@@ -1085,10 +1085,14 @@ public abstract class VaadinService implements Serializable {
      * @param session
      */
     void cleanupSession(VaadinSession session) {
+        assert session.hasLock();
+
         if (isSessionActive(session)) {
+            // Both methods start access if needed
             closeInactiveUIs(session);
             removeClosedUIs(session);
         } else {
+            session.ensureAccessActive();
             if (!session.isClosing()) {
                 closeSession(session);
                 if (session.getSession() != null) {
@@ -1122,16 +1126,18 @@ public abstract class VaadinService implements Serializable {
     private void removeClosedUIs(final VaadinSession session) {
         ArrayList<UI> uis = new ArrayList<UI>(session.getUIs());
         for (final UI ui : uis) {
-            ui.accessSynchronously(new Runnable() {
-                @Override
-                public void run() {
-                    if (ui.isClosing()) {
-                        getLogger().log(Level.FINER, "Removing closed UI {0}",
-                                ui.getUIId());
-                        session.removeUI(ui);
-                    }
+            // Only start access if there's actually something to close
+            if (ui.isClosing()) {
+                // Access needed since detach listeners are called
+                session.lockAndAccess(ui);
+                try {
+                    getLogger().log(Level.FINER, "Removing closed UI {0}",
+                            ui.getUIId());
+                    session.removeUI(ui);
+                } finally {
+                    session.unlock();
                 }
-            });
+            }
         }
     }
 
@@ -1142,18 +1148,22 @@ public abstract class VaadinService implements Serializable {
      * @since 7.0.0
      */
     private void closeInactiveUIs(VaadinSession session) {
-        final String sessionId = session.getSession().getId();
-        for (final UI ui : session.getUIs()) {
+        assert session.hasLock();
+
+        String sessionId = session.getSession().getId();
+        for (UI ui : session.getUIs()) {
             if (!isUIActive(ui) && !ui.isClosing()) {
-                ui.accessSynchronously(new Runnable() {
-                    @Override
-                    public void run() {
-                        getLogger().log(Level.FINE,
-                                "Closing inactive UI #{0} in session {1}",
-                                new Object[] { ui.getUIId(), sessionId });
-                        ui.close();
-                    }
-                });
+                // Access needed since ui.close() pushes changes and may also be
+                // overridden with application logic
+                session.lockAndAccess(ui);
+                try {
+                    getLogger().log(Level.FINE,
+                            "Closing inactive UI #{0} in session {1}",
+                            new Object[] { ui.getUIId(), sessionId });
+                    ui.close();
+                } finally {
+                    session.unlock();
+                }
             }
         }
     }
@@ -1287,23 +1297,21 @@ public abstract class VaadinService implements Serializable {
     public void requestEnd(VaadinRequest request, VaadinResponse response,
             VaadinSession session) {
         if (session != null) {
-            final VaadinSession finalSession = session;
 
-            session.accessSynchronously(new Runnable() {
-                @Override
-                public void run() {
-                    cleanupSession(finalSession);
-                }
-            });
+            session.lock(false);
+            try {
+                CurrentInstance.setCurrent(session);
+                // cleanupSession fires access events if necessary
+                cleanupSession(session);
 
-            final long duration = (System.nanoTime() - (Long) request
-                    .getAttribute(REQUEST_START_TIME_ATTRIBUTE)) / 1000000;
-            session.accessSynchronously(new Runnable() {
-                @Override
-                public void run() {
-                    finalSession.setLastRequestDuration(duration);
-                }
-            });
+                long duration = (System.nanoTime() - (Long) request
+                        .getAttribute(REQUEST_START_TIME_ATTRIBUTE)) / 1000000;
+                session.setLastRequestDuration(duration);
+
+            } finally {
+                session.unlock();
+            }
+
         }
         CurrentInstance.clearAll();
     }
@@ -1377,7 +1385,7 @@ public abstract class VaadinService implements Serializable {
             VaadinResponse response, VaadinSession vaadinSession, Throwable t)
             throws ServiceException {
         if (vaadinSession != null) {
-            vaadinSession.lock();
+            vaadinSession.lock(false);
         }
         try {
             ErrorHandler errorHandler = ErrorEvent
@@ -1661,30 +1669,57 @@ public abstract class VaadinService implements Serializable {
         FutureAccess future = new FutureAccess(session, runnable);
         session.getPendingAccessQueue().add(future);
 
-        /*
-         * If no thread is currently holding the lock, pending changes for UIs
-         * with automatic push would not be processed and pushed until the next
-         * time there is a request or someone does an explicit push call.
-         * 
-         * To remedy this, we try to get the lock at this point. If the lock is
-         * currently held by another thread, we just back out as the queue will
-         * get purged once it is released. If the lock is held by the current
-         * thread, we just release it knowing that the queue gets purged once
-         * the lock is ultimately released. If the lock is not held by any
-         * thread and we acquire it, we just release it again to purge the queue
-         * right away.
-         */
+        ensureAccessQueuePurged(session);
+
+        return future;
+    }
+
+    /**
+     * Ensures the pending access queue of the passed session gets purged. If
+     * the session is already locked by this or some other thread, it is assumed
+     * that the queue will be purged before the lock is released. Otherwise the
+     * session is locked and the queue is purged before returning from this
+     * method.
+     * 
+     * @since 7.2
+     * @param session
+     *            the session for which the access queue should be purged
+     */
+    public void ensureAccessQueuePurged(VaadinSession session) {
         try {
-            // tryLock() would be shorter, but it does not guarantee fairness
+            /*
+             * If the lock is currently held by another thread, we just back out
+             * as the queue will get purged once it is released. If the lock is
+             * held by the current thread, we just release it knowing that the
+             * queue gets purged once the lock is ultimately released. If the
+             * lock is not held by any thread and we acquire it, we check that
+             * the queue is still not empty and purge it.
+             * 
+             * tryLock() would be shorter, but it does not guarantee fairness
+             */
             if (session.getLockInstance().tryLock(0, TimeUnit.SECONDS)) {
-                // unlock triggers runPendingAccessTasks
-                session.unlock();
+                try {
+                    /*
+                     * Lock session again to set up preconditions for
+                     * session.unlock(). Start access if there's anything in the
+                     * queue to make sure it is purged.
+                     */
+                    boolean startAccess = !session.getPendingAccessQueue()
+                            .isEmpty();
+                    session.lock(startAccess);
+
+                    /*
+                     * We have acquired the lock twice. Release it once here so
+                     * that session.unlock() can do the final release if needed.
+                     */
+                    session.getLockInstance().unlock();
+                } finally {
+                    session.unlock();
+                }
             }
         } catch (InterruptedException e) {
             // Just ignore
         }
-
-        return future;
     }
 
     /**

@@ -43,7 +43,7 @@ public class TableFirstRowFlicker extends LegacyApplication {
             @Override
             public void run() {
                 while (t != null) {
-                    t.getUI().getSession().lock();
+                    t.getUI().getSession().lockAndAccess(t.getUI());
                     try {
                         int firstId = t.getCurrentPageFirstItemIndex();
                         Object selected = t.getValue();

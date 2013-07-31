@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head profile="http://selenium-ide.openqa.org/profiles/test-case">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link rel="selenium.base" href="" />
+<title>New Test</title>
+</head>
+<body>
+<table cellpadding="1" cellspacing="1" border="1">
+<thead>
+<tr><td rowspan="1" colspan="3">New Test</td></tr>
+</thead><tbody>
+<!--Confusing asynchronous stuff going on here, please see comment for each command-->
+<tr>
+	<td>open</td>
+	<td>/run/com.vaadin.tests.application.AccessListenerTest?restartApplication</td>
+	<td></td>
+</tr>
+<!--Enable listener-->
+<tr>
+	<td>mouseClick</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[0]/VCheckBox[0]/domChild[0]</td>
+	<td>64,3</td>
+</tr>
+<!--Sync-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[1]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of request enabling listener-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>1. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>2. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+<!--Show resource-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[2]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>3. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of show resource request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>4. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+<!--Sync-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[1]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of show resource request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_3</td>
+	<td>5. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of resource request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_2</td>
+	<td>6. Access starting. Request to /APP/connector/0/19/source/se.gif. Current UI id: 0.</td>
+</tr>
+<!--End of resource request. UI 0 is dirty since this messages have been logged but not yet sent.-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>7. Access ending. Changes sent to UIs: []. Still dirty UIs (before this message was added): [0]</td>
+</tr>
+<!--Start of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>8. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+<!--Load UI-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[3]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>9. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of Load UI request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>10. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+<!--Wait until UI has been loaded-->
+<tr>
+	<td>pause</td>
+	<td>2000</td>
+	<td></td>
+</tr>
+<!--Sync-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[1]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of Load UI request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_5</td>
+	<td>11. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of HTML request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_4</td>
+	<td>12. Access starting. Request to /com.vaadin.tests.application.AccessListenerTest.</td>
+</tr>
+<!--End of HTML request. UI 0 is now dirty because messages have been loaded.-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_3</td>
+	<td>13. Access ending. Changes sent to UIs: []. Still dirty UIs (before this message was added): [0]</td>
+</tr>
+<!--Start of UI init request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_2</td>
+	<td>14. Access starting. Request to /com.vaadin.tests.application.AccessListenerTest?v-browserDetails.</td>
+</tr>
+<!--End of UI init request, writing UIDL for the new UI-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>15. Access ending. Changes sent to UIs: [1]. Still dirty UIs (before this message was added): [0]</td>
+</tr>
+<!--Start of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>16. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+<!--Sync-->
+<tr>
+	<td>click</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::/VVerticalLayout[0]/Slot[2]/VVerticalLayout[0]/Slot[1]/VButton[0]/domChild[0]/domChild[0]</td>
+	<td></td>
+</tr>
+<!--End of previous sync request, UI 0 is no longer dirty since changes logged during UI 1 init has now finally been delivered-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_1</td>
+	<td>17. Access ending. Changes sent to UIs: [0]. Still dirty UIs (before this message was added): []</td>
+</tr>
+<!--Start of sync request-->
+<tr>
+	<td>assertText</td>
+	<td>vaadin=runcomvaadintestsapplicationAccessListenerTest::PID_SLog_row_0</td>
+	<td>18. Access starting. Request to /UIDL/. Current UI id: 0.</td>
+</tr>
+
+</tbody></table>
+</body>
+</html>

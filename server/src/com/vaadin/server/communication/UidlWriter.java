@@ -75,6 +75,8 @@ public class UidlWriter implements Serializable {
             throws IOException, JSONException {
         VaadinSession session = ui.getSession();
 
+        assert session.isAccessActive();
+
         // Purge pending access calls as they might produce additional changes
         // to write out
         session.getService().runPendingAccessTasks(session);
@@ -290,6 +292,8 @@ public class UidlWriter implements Serializable {
             }
 
             assert (uiConnectorTracker.getDirtyConnectors().isEmpty()) : "Connectors have been marked as dirty during the end of the paint phase. This is most certainly not intended.";
+
+            session.markChangesSent(ui);
 
             writePerformanceData(ui, writer);
         } finally {

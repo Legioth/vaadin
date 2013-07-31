@@ -55,7 +55,8 @@ public class ConnectorResourceHandler implements RequestHandler {
         String cid = matcher.group(2);
         String key = matcher.group(3);
 
-        session.lock();
+        // Lock to find connector instance, no need to start access
+        session.lock(false);
         UI ui;
         ClientConnector connector;
         try {

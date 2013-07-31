@@ -228,20 +228,22 @@ public class UiAccess extends AbstractTestUIWithLog {
                         CurrentInstance.set(CurrentInstanceTestType.class,
                                 new CurrentInstanceTestType(
                                         "Set before accessSynchronosly"));
-                        accessSynchronously(new Runnable() {
-                            @Override
-                            public void run() {
-                                log.log("accessSynchronously has request? "
-                                        + (VaadinService.getCurrentRequest() != null));
-                                log.log("Test value in accessSynchronously: "
-                                        + CurrentInstance
-                                                .get(CurrentInstanceTestType.class));
-                                CurrentInstance.set(
-                                        CurrentInstanceTestType.class,
-                                        new CurrentInstanceTestType(
-                                                "Set in accessSynchronosly"));
-                            }
-                        });
+                        // There is no accessSynchronously any more, but this
+                        // keeps the test working as before
+                        getSession().lockAndAccess(UiAccess.this);
+                        try {
+                            log.log("accessSynchronously has request? "
+                                    + (VaadinService.getCurrentRequest() != null));
+                            log.log("Test value in accessSynchronously: "
+                                    + CurrentInstance
+                                            .get(CurrentInstanceTestType.class));
+                            CurrentInstance.set(CurrentInstanceTestType.class,
+                                    new CurrentInstanceTestType(
+                                            "Set in accessSynchronosly"));
+                        } finally {
+                            getSession().unlock();
+                        }
+
                         log.log("has request after accessSynchronously? "
                                 + (VaadinService.getCurrentRequest() != null));
                         log("Test value after accessSynchornously: "
@@ -311,7 +313,7 @@ public class UiAccess extends AbstractTestUIWithLog {
                                  * push does not happen during normal request
                                  * handling.
                                  */
-                                session.lock();
+                                session.lock(false);
                                 try {
                                     access(new Runnable() {
                                         @Override

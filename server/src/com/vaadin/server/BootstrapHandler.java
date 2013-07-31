@@ -156,6 +156,14 @@ public abstract class BootstrapHandler extends SynchronizedRequestHandler {
     public boolean synchronizedHandleRequest(VaadinSession session,
             VaadinRequest request, VaadinResponse response) throws IOException {
         try {
+            /*
+             * Will probably not do anything requiring an active access, but
+             * starting one in case a custom UI provider or bootstrap listener
+             * does something funky. Might also be needed for
+             * LegacyApplication.init
+             */
+            session.ensureAccessActive();
+
             // Update WebBrowser here only to make WebBrowser information
             // available in init for LegacyApplications
             session.getBrowser().updateRequestDetails(request);
