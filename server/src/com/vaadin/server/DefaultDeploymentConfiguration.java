@@ -16,7 +16,10 @@
 
 package com.vaadin.server;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -126,6 +129,19 @@ public class DefaultDeploymentConfiguration implements DeploymentConfiguration {
         return defaultValue;
     }
 
+    private String getSystemPropertyPrefix() {
+        String pkgName;
+        final Package pkg = systemPropertyBaseClass.getPackage();
+        if (pkg != null) {
+            pkgName = pkg.getName();
+        } else {
+            final String className = systemPropertyBaseClass.getName();
+            pkgName = new String(className.toCharArray(), 0,
+                    className.lastIndexOf('.'));
+        }
+        return pkgName;
+    }
+
     /**
      * Gets an system property value.
      * 
@@ -136,15 +152,7 @@ public class DefaultDeploymentConfiguration implements DeploymentConfiguration {
     protected String getSystemProperty(String parameterName) {
         String val = null;
 
-        String pkgName;
-        final Package pkg = systemPropertyBaseClass.getPackage();
-        if (pkg != null) {
-            pkgName = pkg.getName();
-        } else {
-            final String className = systemPropertyBaseClass.getName();
-            pkgName = new String(className.toCharArray(), 0,
-                    className.lastIndexOf('.'));
-        }
+        String pkgName = getSystemPropertyPrefix();
         val = System.getProperty(pkgName + "." + parameterName);
         if (val != null) {
             return val;
@@ -320,6 +328,25 @@ public class DefaultDeploymentConfiguration implements DeploymentConfiguration {
     @Deprecated
     public LegacyProperyToStringMode getLegacyPropertyToStringMode() {
         return legacyPropertyToStringMode;
+    }
+
+    @Override
+    public Set<String> getDefinedPropertyNames() {
+        HashSet<String> set = new HashSet<String>();
+        set.addAll((Set<String>) (Set<?>) initParameters.keySet());
+
+        // Find all system properties
+
+        String prefix = getSystemPropertyPrefix() + ".";
+        Properties properties = System.getProperties();
+        for (Object keyObj : properties.keySet()) {
+            String key = (String) keyObj;
+            if (key.startsWith(prefix)) {
+                set.add(key.substring(prefix.length()));
+            }
+        }
+
+        return Collections.unmodifiableSet(set);
     }
 
 }

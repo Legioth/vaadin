@@ -93,16 +93,14 @@ public class VaadinServlet extends HttpServlet implements Constants {
 
         DeploymentConfiguration deploymentConfiguration = createDeploymentConfiguration(initParameters);
         try {
+            // Sets CurrentInstance
             servletService = createServletService(deploymentConfiguration);
+            servletInitialized();
         } catch (ServiceException e) {
             throw new ServletException("Could not initialize VaadinServlet", e);
+        } finally {
+            CurrentInstance.clearAll();
         }
-        // Sets current service even though there are no request and response
-        servletService.setCurrentInstances(null, null);
-
-        servletInitialized();
-
-        CurrentInstance.clearAll();
     }
 
     private void readUiFromEnclosingClass(Properties initParameters) {

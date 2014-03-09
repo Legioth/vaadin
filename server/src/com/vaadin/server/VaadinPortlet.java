@@ -307,16 +307,14 @@ public class VaadinPortlet extends GenericPortlet implements Constants,
 
         DeploymentConfiguration deploymentConfiguration = createDeploymentConfiguration(initParameters);
         try {
+            // Sets CurrentInstance
             vaadinService = createPortletService(deploymentConfiguration);
+            portletInitialized();
         } catch (ServiceException e) {
-            throw new PortletException("Could not initialized VaadinPortlet", e);
+            throw new PortletException("Could not initialize VaadinPortlet", e);
+        } finally {
+            CurrentInstance.clearAll();
         }
-        // Sets current service even though there are no request and response
-        vaadinService.setCurrentInstances(null, null);
-
-        portletInitialized();
-
-        CurrentInstance.clearAll();
     }
 
     protected void portletInitialized() throws PortletException {

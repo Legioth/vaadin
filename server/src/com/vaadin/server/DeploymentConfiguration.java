@@ -18,6 +18,7 @@ package com.vaadin.server;
 
 import java.io.Serializable;
 import java.util.Properties;
+import java.util.Set;
 
 import com.vaadin.data.util.AbstractProperty;
 import com.vaadin.shared.communication.PushMode;
@@ -160,4 +161,12 @@ public interface DeploymentConfiguration extends Serializable {
     @Deprecated
     public LegacyProperyToStringMode getLegacyPropertyToStringMode();
 
+    /**
+     * Gets a set of all property names defined for the configuration.
+     * 
+     * @since 7.2
+     * 
+     * @return a set of all property names
+     */
+    public Set<String> getDefinedPropertyNames();
 }

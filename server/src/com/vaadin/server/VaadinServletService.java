@@ -49,7 +49,7 @@ public class VaadinServletService extends VaadinService {
     public VaadinServletService(VaadinServlet servlet,
             DeploymentConfiguration deploymentConfiguration)
             throws ServiceException {
-        super(deploymentConfiguration);
+        super(deploymentConfiguration, servlet.getClass());
         this.servlet = servlet;
 
         // Set default class loader if not already set

@@ -50,6 +50,7 @@ import com.vaadin.data.util.converter.Converter;
 import com.vaadin.data.util.converter.ConverterFactory;
 import com.vaadin.data.util.converter.DefaultConverterFactory;
 import com.vaadin.event.EventRouter;
+import com.vaadin.server.ClientConnector.AttachListener;
 import com.vaadin.shared.communication.PushMode;
 import com.vaadin.ui.AbstractField;
 import com.vaadin.ui.Table;
@@ -1147,6 +1148,37 @@ public class VaadinSession implements HttpSessionBindingListener, Serializable {
                 previousUi.close();
             }
         }
+
+        eventRouter.fireEvent(new ClientConnector.AttachEvent(ui));
+    }
+
+    /**
+     * Adds a listener that gets notified whenever a new UI is attached to this
+     * session.
+     * 
+     * @since 7.2
+     * @param attachListener
+     *            the listener to add
+     * @see #removeUiAttachListener(AttachListener)
+     * @see AttachListener
+     */
+    public void addUiAttachListener(AttachListener attachListener) {
+        eventRouter.addListener(ClientConnector.AttachEvent.class,
+                attachListener, AttachListener.attachMethod);
+    }
+
+    /**
+     * Removes a listener if previously added through
+     * {@link #addUiAttachListener(AttachListener)}.
+     * 
+     * @since 7.2
+     * @param attachListener
+     *            the listener to remove
+     * @see #addUiAttachListener(AttachListener)
+     */
+    public void removeUiAttachListener(AttachListener attachListener) {
+        eventRouter.removeListener(ClientConnector.AttachEvent.class,
+                attachListener, AttachListener.attachMethod);
     }
 
     /**

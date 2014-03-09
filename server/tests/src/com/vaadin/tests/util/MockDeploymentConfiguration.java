@@ -3,6 +3,7 @@ package com.vaadin.tests.util;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import com.vaadin.server.DeploymentConfiguration;
 import com.vaadin.shared.communication.PushMode;
@@ -106,6 +107,11 @@ public class MockDeploymentConfiguration implements DeploymentConfiguration {
     public void setLegacyPropertyToStringMode(
             LegacyProperyToStringMode legacyPropertyToStringMode) {
         this.legacyPropertyToStringMode = legacyPropertyToStringMode;
+    }
+
+    @Override
+    public Set<String> getDefinedPropertyNames() {
+        return applicationOrSystemProperty.keySet();
     }
 
 }

@@ -42,7 +42,7 @@ public class VaadinPortletService extends VaadinService {
     public VaadinPortletService(VaadinPortlet portlet,
             DeploymentConfiguration deploymentConfiguration)
             throws ServiceException {
-        super(deploymentConfiguration);
+        super(deploymentConfiguration, portlet.getClass());
         this.portlet = portlet;
 
         // Set default class loader if not already set

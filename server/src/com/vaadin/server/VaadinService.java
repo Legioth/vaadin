@@ -24,16 +24,19 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.Serializable;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -50,9 +53,11 @@ import javax.servlet.http.HttpServletResponse;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.vaadin.annotations.AddonDefinition;
 import com.vaadin.annotations.PreserveOnRefresh;
 import com.vaadin.event.EventRouter;
 import com.vaadin.server.VaadinSession.FutureAccess;
+import com.vaadin.server.addon.Addon;
 import com.vaadin.server.communication.FileUploadHandler;
 import com.vaadin.server.communication.HeartbeatHandler;
 import com.vaadin.server.communication.PublishedFileHandler;
@@ -140,14 +145,37 @@ public abstract class VaadinService implements Serializable {
      */
     private boolean initialized = false;
 
+    private final Class<?> addonAnnotationClass;
+    private final Collection<Addon<?>> addons = new ArrayList<Addon<?>>();
+
     /**
      * Creates a new vaadin service based on a deployment configuration
      * 
      * @param deploymentConfiguration
      *            the deployment configuration for the service
+     * @deprecated As of 7.2, use
+     *             {@link #VaadinService(DeploymentConfiguration,Class)} instead
      */
+    @Deprecated
     public VaadinService(DeploymentConfiguration deploymentConfiguration) {
+        this(deploymentConfiguration, null);
+    }
+
+    /**
+     * Creates a new Vaadin service based on a deployment configuration and an
+     * class with potential add-on configuration annotations.
+     * 
+     * @param deploymentConfiguration
+     *            the deployment configuration for the service
+     * @param addonAnnotationClass
+     *            the class with add-on configuration annotations
+     * 
+     * @since 7.2
+     */
+    public VaadinService(DeploymentConfiguration deploymentConfiguration,
+            Class<?> addonAnnotationClass) {
         this.deploymentConfiguration = deploymentConfiguration;
+        this.addonAnnotationClass = addonAnnotationClass;
 
         final String classLoaderName = getDeploymentConfiguration()
                 .getApplicationOrSystemProperty("ClassLoader", null);
@@ -176,11 +204,139 @@ public abstract class VaadinService implements Serializable {
      *             if a problem occurs when creating the service
      */
     public void init() throws ServiceException {
+        // Sets current service even though there's no request and response
+        setCurrentInstances(null, null);
+
         List<RequestHandler> handlers = createRequestHandlers();
+        if (addonAnnotationClass != null) {
+            configureAddons();
+            for (Addon<?> addon : addons) {
+                addon.updateRequestHandlers(handlers);
+            }
+        }
         Collections.reverse(handlers);
         requestHandlers = Collections.unmodifiableCollection(handlers);
 
         initialized = true;
+    }
+
+    private void configureAddons() throws ServiceException {
+        // Find annotations from servlet / portlet class (and superclasses)
+
+        Map<Class<? extends Annotation>, Annotation> configurations = findAddons(addonAnnotationClass);
+        for (Entry<Class<? extends Annotation>, Annotation> entry : configurations
+                .entrySet()) {
+            Addon<?> addon = initializeAddon(entry.getKey(), entry.getValue());
+            addons.add(addon);
+        }
+    }
+
+    private Map<Class<? extends Annotation>, Annotation> findAddons(
+            Class<?> targetClass) throws ServiceException {
+        Map<Class<? extends Annotation>, Annotation> configurations = new HashMap<Class<? extends Annotation>, Annotation>();
+        DeploymentConfiguration deploymentConfiguration = getDeploymentConfiguration();
+
+        while (targetClass != Object.class) {
+            Annotation[] annotations = targetClass.getAnnotations();
+            for (Annotation annotation : annotations) {
+                Class<? extends Annotation> annotationType = annotation
+                        .annotationType();
+                if (annotationType.getAnnotation(AddonDefinition.class) != null) {
+                    if (configurations.containsKey(annotationType)) {
+                        getLogger()
+                                .log(Level.WARNING,
+                                        "Add-on annotation {1} on {2} overridden by annotation on sub class",
+                                        new Object[] { annotationType,
+                                                targetClass });
+                    } else {
+                        String setting = deploymentConfiguration
+                                .getApplicationOrSystemProperty(
+                                        annotationType.getName(), "annotation");
+                        if ("enabled".equals(setting)) {
+                            // Ignore annotation instance even though it exists
+                            configurations.put(annotationType, null);
+                        } else if ("annotation".equals(setting)) {
+                            // Configured based on annotation instance
+                            configurations.put(annotationType, annotation);
+                        } else if ("disabled".contains(setting)) {
+                            // Ignore the annotation
+                            getLogger()
+                                    .log(Level.INFO,
+                                            "Ignoring add-on annotation {1} on {2} because the add-on is disabled by an init parameter",
+                                            new Object[] { annotationType,
+                                                    targetClass });
+                            continue;
+                        } else {
+                            throw new ServiceException(
+                                    "Unsupported value "
+                                            + setting
+                                            + " for add-on annotation property "
+                                            + annotationType.getName()
+                                            + ". Supported values are: enabled, annotation and disabled");
+                        }
+                    }
+                }
+            }
+
+            targetClass = targetClass.getSuperclass();
+        }
+
+        // Find addons only defined in web.xml
+        for (String propertyName : deploymentConfiguration
+                .getDefinedPropertyNames()) {
+            String value = deploymentConfiguration
+                    .getApplicationOrSystemProperty(propertyName, "");
+            if ("enabled".equals(value)) {
+                // Property value "enabled" can be an add-on, check if property
+                // name describes an add-on annotation type
+                try {
+                    Class<?> propertyClass = Class.forName(propertyName, false,
+                            getClassLoader());
+                    if (configurations.containsKey(propertyClass)) {
+                        // Ignore if annotation was found on servlet / portlet
+                        continue;
+                    }
+
+                    if (Annotation.class.isAssignableFrom(propertyClass)
+                            && propertyClass
+                                    .getAnnotation(AddonDefinition.class) != null) {
+                        // Use without annotation configuration
+                        configurations.put(
+                                propertyClass.asSubclass(Annotation.class),
+                                null);
+                    } else {
+                        getLogger()
+                                .log(Level.FINEST,
+                                        "Property {0} is a proper class name, but it wasn't identified as an add-on annotation",
+                                        propertyName);
+                    }
+                } catch (ClassNotFoundException e) {
+                    // Just ignore
+                    getLogger().log(Level.FINEST,
+                            "No annotation class found for property {0}",
+                            propertyName);
+                }
+            }
+        }
+
+        return configurations;
+    }
+
+    private <T extends Annotation> Addon<T> initializeAddon(
+            Class<T> annotationType, Annotation configuration)
+            throws ServiceException {
+        AddonDefinition definition = annotationType
+                .getAnnotation(AddonDefinition.class);
+        Class<? extends Addon<T>> addonType = (Class<? extends Addon<T>>) definition
+                .value();
+        try {
+            Addon<T> addon = addonType.newInstance();
+            addon.configure(this, annotationType,
+                    annotationType.cast(configuration));
+            return addon;
+        } catch (Exception e) {
+            throw new ServiceException(e);
+        }
     }
 
     /**
@@ -1804,6 +1960,9 @@ public abstract class VaadinService implements Serializable {
      * @since 7.2
      */
     public void destroy() {
+        for (Addon<?> addon : addons) {
+            addon.destroy();
+        }
         eventRouter.fireEvent(new ServiceDestroyEvent(this));
     }
 
