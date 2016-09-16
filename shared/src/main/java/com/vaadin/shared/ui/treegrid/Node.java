@@ -22,18 +22,29 @@ public class Node {
     private String c2;
 
     private boolean expanded;
+    private boolean expandable;
 
     @Deprecated
     public Node() {
         // Bean constructor
     }
 
-    public Node(int level, String key, String c1, String c2, boolean expanded) {
+    public Node(int level, String key, String c1, String c2, boolean expanded,
+            boolean expandable) {
         this.level = level;
         this.key = key;
         this.c1 = c1;
         this.c2 = c2;
         this.expanded = expanded;
+        this.expandable = expandable;
+    }
+
+    public void setExpandable(boolean expandable) {
+        this.expandable = expandable;
+    }
+
+    public boolean isExpandable() {
+        return expandable;
     }
 
     public void setKey(String key) {

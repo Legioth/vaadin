@@ -13,28 +13,10 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.vaadin.server.data.hierarchical;
+package com.vaadin.shared.ui.treegrid;
 
-import java.io.Serializable;
-import java.util.stream.Stream;
+import com.vaadin.shared.AbstractComponentState;
 
-public interface HierarchicalDataSource<T> extends Serializable {
-
-    Stream<T> fetchChildren(HierarchicalQuery<T> query);
-
-    /**
-     * Gets the amount of data in this DataSource.
-     *
-     * @param query
-     *            query with sorting and filtering
-     * @return the size of the data source
-     */
-    int countChildren(HierarchicalQuery<T> query);
-
-    boolean isExpandable(T t);
-
-    default T getRoot() {
-        return null;
-    }
-
+public class TreeGridState extends AbstractComponentState {
+    public String additionalColname = "Hash code";
 }

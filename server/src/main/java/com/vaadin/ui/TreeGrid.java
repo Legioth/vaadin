@@ -17,7 +17,9 @@ package com.vaadin.ui;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -29,6 +31,7 @@ import com.vaadin.server.data.hierarchical.HierarchicalQuery;
 import com.vaadin.shared.ui.treegrid.Node;
 import com.vaadin.shared.ui.treegrid.TreeGridClientRpc;
 import com.vaadin.shared.ui.treegrid.TreeGridServerRpc;
+import com.vaadin.shared.ui.treegrid.TreeGridState;
 
 public class TreeGrid<T> extends AbstractComponent {
 
@@ -40,6 +43,7 @@ public class TreeGrid<T> extends AbstractComponent {
 
     private final NodeIndexes nodeIndexes = new NodeIndexes();
     private final KeyMapper<T> keyMapper = new KeyMapper<>();
+    private final Set<String> expandedNodes = new HashSet<>();
 
     public TreeGrid(HierarchicalDataSource<T> dataSource) {
         this.dataSource = dataSource;
@@ -55,20 +59,33 @@ public class TreeGrid<T> extends AbstractComponent {
                 int toggledNodeIndex = nodeIndexes.getIndexOf(id);
 
                 if (expanded) {
+                    assert !expandedNodes.contains(id);
+                    expandedNodes.add(id);
+
                     T parentRow = keyMapper.get(id);
                     List<String> childKeys = loadChildren(parentRow);
 
                     nodeIndexes.setChildren(id, childKeys);
 
-                    getRpc().addRows(toggledNodeIndex + 1, childKeys.size());
-                    sendRows(toggledNodeIndex + 1, childKeys.size());
+                    if (!childKeys.isEmpty()) {
+                        getRpc().addRows(toggledNodeIndex + 1,
+                                childKeys.size());
+                        sendRows(toggledNodeIndex + 1, childKeys.size());
+                    }
                 } else {
+                    assert expandedNodes.contains(id);
+
                     int removeSize = nodeIndexes.getTotalSize(id) - 1;
-                    nodeIndexes.getDescendants(id).forEach(childKey -> keyMapper
-                            .remove(keyMapper.get(childKey)));
+                    nodeIndexes.getDescendants(id).forEach(childKey -> {
+                        keyMapper.remove(keyMapper.get(childKey));
+                        expandedNodes.remove(childKey);
+                    });
+                    expandedNodes.remove(id);
                     nodeIndexes.setChildren(id, Collections.emptyList());
 
-                    getRpc().removeRows(toggledNodeIndex + 1, removeSize);
+                    if (removeSize != 0) {
+                        getRpc().removeRows(toggledNodeIndex + 1, removeSize);
+                    }
                 }
                 // Push expansion update for toggled node
                 sendRows(toggledNodeIndex, 1);
@@ -89,9 +106,13 @@ public class TreeGrid<T> extends AbstractComponent {
     }
 
     private List<String> loadChildren(T parent) {
-        // XXX Always loading all children even though it might not be needed
-        Stream<T> apply = dataSource
-                .apply(new HierarchicalQuery<>(parent, 0, Integer.MAX_VALUE));
+        if (parent == null) {
+            parent = dataSource.getRoot();
+        }
+
+        // XXX Lazy loading
+        Stream<T> apply = dataSource.fetchChildren(
+                new HierarchicalQuery<>(parent, 0, Integer.MAX_VALUE));
         List<T> items = apply.collect(Collectors.toList());
 
         return items.stream().map(keyMapper::key).collect(Collectors.toList());
@@ -105,14 +126,16 @@ public class TreeGrid<T> extends AbstractComponent {
             String key = nodeIndexes.getNodeAt(index);
             T row = keyMapper.get(key);
 
-            // XXX Assuming that there are no leaf nodes
-            boolean expanded = nodeIndexes.getChildCount(key) != 0;
+            boolean expanded = expandedNodes.contains(key);
 
             int level = nodeIndexes.getLevel(key);
 
+            boolean expandable = dataSource.isExpandable(row);
+
             Node node = new Node(level, key,
                     hierachyColValueProvider.apply(row),
-                    additionalColValueProvider.apply(row), expanded);
+                    additionalColValueProvider.apply(row), expanded,
+                    expandable);
 
             nodes.add(node);
         }
@@ -127,8 +150,19 @@ public class TreeGrid<T> extends AbstractComponent {
         return getRpcProxy(TreeGridClientRpc.class);
     }
 
-    public void setAdditionalColValueProvider(
+    @Override
+    protected TreeGridState getState() {
+        return (TreeGridState) super.getState();
+    }
+
+    public void setHierachyColValueProvider(
+            Function<T, String> hierachyColValueProvider) {
+        this.hierachyColValueProvider = hierachyColValueProvider;
+    }
+
+    public void setAdditionalCol(String name,
             Function<T, String> additionalColValueProvider) {
+        getState().additionalColname = name;
         this.additionalColValueProvider = additionalColValueProvider;
     }
 

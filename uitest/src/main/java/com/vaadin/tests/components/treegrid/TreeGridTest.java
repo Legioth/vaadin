@@ -81,25 +81,34 @@ public class TreeGridTest extends AbstractTestUI {
     protected void setup(VaadinRequest request) {
         HierarchicalDataSource<Node> dataSource = new HierarchicalDataSource<Node>() {
             @Override
-            public Stream<Node> apply(HierarchicalQuery<Node> query) {
+            public Stream<Node> fetchChildren(HierarchicalQuery<Node> query) {
                 int limit = Math.min(query.getLimit(),
-                        size(query) - query.getOffset());
+                        countChildren(query) - query.getOffset());
 
-                Node parent = query.getParent().orElse(null);
+                Node parent = query.getContext();
                 return IntStream
                         .range(query.getOffset(), query.getOffset() + limit)
                         .mapToObj(id -> new Node(parent, id));
             }
 
             @Override
-            public int size(HierarchicalQuery<Node> query) {
-                return query.getParent().map(Node::getChildCount)
-                        .orElse(Integer.valueOf(32)).intValue();
+            public int countChildren(HierarchicalQuery<Node> query) {
+                Node node = query.getContext();
+                if (node == null) {
+                    return 32;
+                }
+
+                return node.getChildCount();
+            }
+
+            @Override
+            public boolean isExpandable(Node t) {
+                return true;
             }
         };
         TreeGrid<Node> grid = new TreeGrid<>(dataSource);
 
-        grid.setAdditionalColValueProvider(
+        grid.setAdditionalCol("Child count",
                 node -> String.valueOf(node.getChildCount()));
 
         addComponent(grid);

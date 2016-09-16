@@ -15,21 +15,19 @@
  */
 package com.vaadin.server.data.hierarchical;
 
-import java.util.Optional;
-
 public class HierarchicalQuery<T> {
-    private T parent;
-    private int limit;
-    private int offset;
+    private final T context;
+    private final int limit;
+    private final int offset;
 
-    public HierarchicalQuery(T parent, int offset, int limit) {
-        this.parent = parent;
+    public HierarchicalQuery(T context, int offset, int limit) {
+        this.context = context;
         this.limit = limit;
         this.offset = offset;
     }
 
-    public Optional<T> getParent() {
-        return Optional.ofNullable(parent);
+    public T getContext() {
+        return context;
     }
 
     public int getLimit() {

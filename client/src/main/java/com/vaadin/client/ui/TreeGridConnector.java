@@ -21,6 +21,7 @@ import java.util.List;
 
 import com.google.gwt.dom.client.NativeEvent;
 import com.google.gwt.dom.client.Style.WhiteSpace;
+import com.vaadin.client.communication.StateChangeEvent;
 import com.vaadin.client.data.AbstractRemoteDataSource;
 import com.vaadin.client.renderers.ComplexRenderer;
 import com.vaadin.client.widget.grid.CellReference;
@@ -31,6 +32,7 @@ import com.vaadin.shared.ui.Connect;
 import com.vaadin.shared.ui.treegrid.Node;
 import com.vaadin.shared.ui.treegrid.TreeGridClientRpc;
 import com.vaadin.shared.ui.treegrid.TreeGridServerRpc;
+import com.vaadin.shared.ui.treegrid.TreeGridState;
 import com.vaadin.ui.TreeGrid;
 
 @Connect(TreeGrid.class)
@@ -50,7 +52,8 @@ public class TreeGridConnector extends AbstractComponentConnector {
                 for (int i = 0; i < data.getLevel(); i++) {
                     string += "  ";
                 }
-                string += data.isExpanded() ? "-" : "+";
+                string += data.isExpandable() ? (data.isExpanded() ? "-" : "+")
+                        : " ";
                 string += " ";
                 string += data.getC1();
 
@@ -71,6 +74,9 @@ public class TreeGridConnector extends AbstractComponentConnector {
             public boolean onBrowserEvent(CellReference<?> cell,
                     NativeEvent event) {
                 Node node = (Node) cell.getRow();
+                if (!node.isExpandable()) {
+                    return false;
+                }
 
                 getRpc().setExpanded(node.getKey(), !node.isExpanded());
 
@@ -120,6 +126,18 @@ public class TreeGridConnector extends AbstractComponentConnector {
                 return row.getC1();
             }
         });
+    }
+
+    @Override
+    public TreeGridState getState() {
+        return (TreeGridState) super.getState();
+    }
+
+    @Override
+    public void onStateChanged(StateChangeEvent stateChangeEvent) {
+        super.onStateChanged(stateChangeEvent);
+
+        getWidget().getColumn(1).setHeaderCaption(getState().additionalColname);
     }
 
     private TreeGridServerRpc getRpc() {
